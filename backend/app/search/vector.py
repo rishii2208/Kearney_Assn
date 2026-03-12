@@ -117,8 +117,27 @@ class VectorIndex:
         with open(metadata_path, "r", encoding="utf-8") as f:
             metadata = json.load(f)
 
-        self.model_name = metadata["model_name"]
-        self.dim = metadata["dim"]
+        # Validate model name
+        saved_model = metadata.get("model_name")
+        if saved_model != self.model_name:
+            raise ValueError(
+                f"Model mismatch: index was built with '{saved_model}' but "
+                f"current config expects '{self.model_name}'. "
+                f"Please rebuild the index with: VectorIndex(model_name='{self.model_name}').build(docs)"
+            )
+
+        # Validate embedding dimension
+        saved_dim = metadata.get("dim")
+        model = self._load_model()
+        expected_dim = model.get_sentence_embedding_dimension()
+        if saved_dim != expected_dim:
+            raise ValueError(
+                f"Dimension mismatch: index has dim={saved_dim} but model "
+                f"'{self.model_name}' produces dim={expected_dim}. "
+                f"Please rebuild the index with: VectorIndex().build(docs)"
+            )
+
+        self.dim = saved_dim
         self.doc_ids = metadata["doc_ids"]
 
         # Load FAISS index
