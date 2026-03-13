@@ -3,9 +3,9 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,14 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
     top_k: int = Field(default=10, ge=1, le=100)
     alpha: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+def get_bm25_index(request: Request):
+    return getattr(request.app.state, "bm25_index", None)
+
+
+def get_vector_index(request: Request):
+    return getattr(request.app.state, "vector_index", None)
 
 
 def _load_documents_from_jsonl(jsonl_path: Path) -> Dict[str, dict]:
@@ -95,13 +103,15 @@ def _render_prometheus_metrics(metrics: Dict[str, float]) -> str:
 
 
 @router.post("/search")
-async def search(payload: SearchRequest, request: Request) -> Dict[str, List[dict]]:
+async def search(
+    payload: SearchRequest,
+    request: Request,
+    bm25_index: Any = Depends(get_bm25_index),
+    vector_index: Any = Depends(get_vector_index),
+) -> Dict[str, List[dict]]:
     started_at = time.perf_counter()
     result_count = 0
     error_message = None
-
-    bm25_index = getattr(request.app.state, "bm25_index", None)
-    vector_index = getattr(request.app.state, "vector_index", None)
 
     try:
         if bm25_index is None or vector_index is None:
