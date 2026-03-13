@@ -1,0 +1,86 @@
+.filters {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.9rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.input {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.button {
+  height: 38px;
+  background: #2563eb;
+  color: #ffffff;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 12px;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.empty {
+  margin-top: 12px;
+  color: #6b7280;
+}
+
+.tableWrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 920px;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px;
+  text-align: left;
+  font-size: 0.88rem;
+  vertical-align: top;
+}
+
+.table thead th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.errorRow {
+  background: #fee2e2;
+}
+
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+}

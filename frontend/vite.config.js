@@ -8,6 +8,8 @@ export default defineConfig({
       '/search': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/metrics': 'http://localhost:8000',
+      '/experiments': 'http://localhost:8000',
+      '/logs': 'http://localhost:8000',
     },
   },
 })

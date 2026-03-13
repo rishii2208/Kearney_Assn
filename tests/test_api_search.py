@@ -154,3 +154,97 @@ def test_health_returns_ok(client):
     assert payload["status"] == "ok"
     assert "version" in payload
     assert "commit" in payload
+
+
+def test_top_queries_endpoint_returns_grouped_counts(client, monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.routes.get_top_queries",
+        lambda limit=10: [
+            {"query": "python", "count": 4, "last_seen": "2026-03-13T10:00:00+00:00"},
+            {"query": "fastapi", "count": 2, "last_seen": "2026-03-13T09:30:00+00:00"},
+        ][:limit],
+    )
+
+    response = client.get("/top-queries?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "top_queries" in payload
+    assert payload["top_queries"][0]["query"] == "python"
+    assert payload["top_queries"][0]["count"] == 4
+
+
+def test_zero_result_queries_endpoint_returns_grouped_counts(client, monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.routes.get_zero_result_queries",
+        lambda limit=10: [
+            {"query": "obscure term", "count": 3, "last_seen": "2026-03-13T10:05:00+00:00"},
+            {"query": "rare topic", "count": 1, "last_seen": "2026-03-13T09:00:00+00:00"},
+        ][:limit],
+    )
+
+    response = client.get("/zero-result-queries?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "zero_result_queries" in payload
+    assert payload["zero_result_queries"][0]["query"] == "obscure term"
+    assert payload["zero_result_queries"][0]["count"] == 3
+
+
+def test_experiments_endpoint_returns_rows(client, monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.routes._read_experiments_csv",
+        lambda: [
+            {
+                "timestamp": "2026-03-13T11:00:00+00:00",
+                "git_commit": "abc123",
+                "ndcg_at_10": 0.4567,
+                "recall_at_10": 0.789,
+                "mrr_at_10": 0.6123,
+            }
+        ],
+    )
+
+    response = client.get("/experiments")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "experiments" in payload
+    assert len(payload["experiments"]) == 1
+    assert payload["experiments"][0]["git_commit"] == "abc123"
+
+
+def test_logs_endpoint_returns_rows_with_filters(client, monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.routes.get_logs_filtered",
+        lambda limit, start_created_at, end_created_at, severity: [
+            {
+                "request_id": "req-1",
+                "query": "python",
+                "latency_ms": 12.3,
+                "top_k": 10,
+                "alpha": 0.5,
+                "result_count": 2,
+                "error": "timeout",
+                "created_at": "2026-03-13T12:00:00+00:00",
+                "user_agent": None,
+            }
+        ],
+    )
+
+    response = client.get(
+        "/logs?limit=10&start_date=2026-03-12&end_date=2026-03-13&severity=error"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "logs" in payload
+    assert len(payload["logs"]) == 1
+    assert payload["logs"][0]["request_id"] == "req-1"
+
+
+def test_logs_endpoint_invalid_date_range_returns_422(client):
+    response = client.get("/logs?start_date=2026-03-14&end_date=2026-03-13")
+
+    assert response.status_code == 422

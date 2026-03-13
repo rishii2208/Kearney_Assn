@@ -1,0 +1,99 @@
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.refreshButton {
+  background: #2563eb;
+  color: #ffffff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.refreshButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 10px;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.panel {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.panelTitle {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.chartWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.chart {
+  width: 100%;
+  min-width: 540px;
+  height: auto;
+}
+
+.axis {
+  stroke: #9ca3af;
+  stroke-width: 1;
+}
+
+.line {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2;
+}
+
+.dot {
+  fill: #1d4ed8;
+}
+
+.axisLabel {
+  fill: #4b5563;
+  font-size: 11px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  padding: 8px;
+  font-size: 0.92rem;
+}
+
+.table thead th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.empty {
+  margin: 0;
+  color: #6b7280;
+}

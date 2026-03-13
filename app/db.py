@@ -150,20 +150,45 @@ def log_request(
     return request_identifier
 
 
-def get_logs(
+def get_logs_filtered(
     limit: int = 100,
+    start_created_at: Optional[str] = None,
+    end_created_at: Optional[str] = None,
+    severity: str = "all",
     db_path: Optional[Union[str, Path]] = None,
 ) -> List[Dict[str, Any]]:
     path = _resolve_db_path(db_path)
     init_db(path)
 
     safe_limit = max(1, min(int(limit), 1000))
+    severity_filter = (severity or "all").lower()
+
+    if severity_filter not in {"all", "error", "success"}:
+        raise ValueError("severity must be one of: all, error, success")
+
+    where_clauses: List[str] = []
+    params: List[Any] = []
+
+    if start_created_at:
+        where_clauses.append("created_at >= ?")
+        params.append(start_created_at)
+
+    if end_created_at:
+        where_clauses.append("created_at <= ?")
+        params.append(end_created_at)
+
+    if severity_filter == "error":
+        where_clauses.append("error IS NOT NULL AND TRIM(error) <> ''")
+    elif severity_filter == "success":
+        where_clauses.append("(error IS NULL OR TRIM(error) = '')")
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     with _DB_LOCK:
         with sqlite3.connect(path, timeout=30, check_same_thread=False) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
-                """
+                f"""
                 SELECT
                     request_id,
                     query,
@@ -175,13 +200,21 @@ def get_logs(
                     created_at,
                     user_agent
                 FROM search_logs
+                {where_sql}
                 ORDER BY created_at DESC
                 LIMIT ?
                 """,
-                (safe_limit,),
+                (*params, safe_limit),
             ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def get_logs(
+    limit: int = 100,
+    db_path: Optional[Union[str, Path]] = None,
+) -> List[Dict[str, Any]]:
+    return get_logs_filtered(limit=limit, db_path=db_path)
 
 
 def _percentile(sorted_values: List[float], quantile: float) -> float:
@@ -239,3 +272,62 @@ def get_metrics(
         "latency_p95_ms": _percentile(latencies, 0.95),
         "zero_result_query_count": zero_result_queries,
     }
+
+
+def get_top_queries(
+    limit: int = 10,
+    db_path: Optional[Union[str, Path]] = None,
+) -> List[Dict[str, Any]]:
+    path = _resolve_db_path(db_path)
+    init_db(path)
+
+    safe_limit = max(1, min(int(limit), 1000))
+
+    with _DB_LOCK:
+        with sqlite3.connect(path, timeout=30, check_same_thread=False) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT
+                    query,
+                    COUNT(*) AS count,
+                    MAX(created_at) AS last_seen
+                FROM search_logs
+                GROUP BY query
+                ORDER BY count DESC, last_seen DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_zero_result_queries(
+    limit: int = 10,
+    db_path: Optional[Union[str, Path]] = None,
+) -> List[Dict[str, Any]]:
+    path = _resolve_db_path(db_path)
+    init_db(path)
+
+    safe_limit = max(1, min(int(limit), 1000))
+
+    with _DB_LOCK:
+        with sqlite3.connect(path, timeout=30, check_same_thread=False) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT
+                    query,
+                    COUNT(*) AS count,
+                    MAX(created_at) AS last_seen
+                FROM search_logs
+                WHERE result_count = 0
+                GROUP BY query
+                ORDER BY count DESC, last_seen DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+
+    return [dict(row) for row in rows]

@@ -1,20 +1,30 @@
+import csv
 import json
 import logging
 import re
 import time
+from datetime import date, datetime, time as dt_time, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from app.db import get_metrics, log_request
+from app.db import (
+    get_logs_filtered,
+    get_metrics,
+    get_top_queries,
+    get_zero_result_queries,
+    log_request,
+)
 from app.search.hybrid import hybrid_search
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+EXPERIMENTS_CSV_PATH = PROJECT_ROOT / "data" / "metrics" / "experiments.csv"
 
 
 class SearchRequest(BaseModel):
@@ -102,6 +112,64 @@ def _render_prometheus_metrics(metrics: Dict[str, float]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _parse_experiment_row(row: Dict[str, str]) -> Dict[str, Any]:
+    parsed = dict(row)
+
+    float_fields = ["alpha", "ndcg_at_10", "recall_at_10", "mrr_at_10"]
+    int_fields = ["k", "num_queries"]
+
+    for field in float_fields:
+        value = parsed.get(field)
+        if value in (None, ""):
+            continue
+        try:
+            parsed[field] = float(value)
+        except (TypeError, ValueError):
+            pass
+
+    for field in int_fields:
+        value = parsed.get(field)
+        if value in (None, ""):
+            continue
+        try:
+            parsed[field] = int(float(value))
+        except (TypeError, ValueError):
+            pass
+
+    return parsed
+
+
+def _read_experiments_csv() -> List[Dict[str, Any]]:
+    if not EXPERIMENTS_CSV_PATH.exists():
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    with open(EXPERIMENTS_CSV_PATH, "r", encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if not row:
+                continue
+            rows.append(_parse_experiment_row(row))
+
+    return rows
+
+
+def _to_utc_day_bounds(
+    start_date: date | None,
+    end_date: date | None,
+) -> tuple[str | None, str | None]:
+    start_iso = None
+    end_iso = None
+
+    if start_date is not None:
+        start_iso = datetime.combine(start_date, dt_time.min, tzinfo=timezone.utc).isoformat()
+
+    if end_date is not None:
+        end_iso = datetime.combine(end_date, dt_time.max, tzinfo=timezone.utc).isoformat()
+
+    return start_iso, end_iso
+
+
 @router.post("/search")
 async def search(
     payload: SearchRequest,
@@ -180,3 +248,79 @@ async def metrics() -> PlainTextResponse:
         content=_render_prometheus_metrics(metrics_payload),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
+
+
+@router.get("/experiments")
+async def experiments() -> Dict[str, List[dict]]:
+    try:
+        return {"experiments": _read_experiments_csv()}
+    except Exception:
+        logger.exception("Failed to read experiments.csv")
+        raise HTTPException(status_code=500, detail="Failed to read experiments")
+
+
+@router.get("/logs")
+async def logs(
+    limit: int = Query(default=100, ge=1, le=1000),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    severity: str = Query(default="all", pattern="^(all|error|success)$"),
+) -> Dict[str, List[dict]]:
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date")
+
+    start_created_at, end_created_at = _to_utc_day_bounds(start_date, end_date)
+
+    try:
+        rows = get_logs_filtered(
+            limit=limit,
+            start_created_at=start_created_at,
+            end_created_at=end_created_at,
+            severity=severity,
+        )
+        return {"logs": rows}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        logger.exception("Failed to read request logs from sqlite")
+        raise HTTPException(status_code=500, detail="Failed to read logs")
+
+
+@router.get("/metrics/top-queries")
+async def top_queries(limit: int = Query(default=10, ge=1, le=100)) -> Dict[str, List[dict]]:
+    try:
+        return {"top_queries": get_top_queries(limit=limit)}
+    except Exception:
+        logger.exception("Failed to read top queries from sqlite")
+        raise HTTPException(status_code=500, detail="Failed to read top queries")
+
+
+@router.get("/metrics/zero-result-queries")
+async def zero_result_queries(
+    limit: int = Query(default=10, ge=1, le=100),
+) -> Dict[str, List[dict]]:
+    try:
+        return {"zero_result_queries": get_zero_result_queries(limit=limit)}
+    except Exception:
+        logger.exception("Failed to read zero-result queries from sqlite")
+        raise HTTPException(status_code=500, detail="Failed to read zero-result queries")
+
+
+@router.get("/top-queries")
+async def top_queries_v1(limit: int = Query(default=10, ge=1, le=100)) -> Dict[str, List[dict]]:
+    try:
+        return {"top_queries": get_top_queries(limit=limit)}
+    except Exception:
+        logger.exception("Failed to read top queries from sqlite")
+        raise HTTPException(status_code=500, detail="Failed to read top queries")
+
+
+@router.get("/zero-result-queries")
+async def zero_result_queries_v1(
+    limit: int = Query(default=10, ge=1, le=100),
+) -> Dict[str, List[dict]]:
+    try:
+        return {"zero_result_queries": get_zero_result_queries(limit=limit)}
+    except Exception:
+        logger.exception("Failed to read zero-result queries from sqlite")
+        raise HTTPException(status_code=500, detail="Failed to read zero-result queries")
