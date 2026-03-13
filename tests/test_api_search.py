@@ -34,14 +34,26 @@ class MockIndex:
         return self._results[:k]
 
 
+class RecordingIndex(MockIndex):
+    def __init__(self, index_dir: Path, results):
+        super().__init__(index_dir=index_dir, results=results)
+        self.seen_queries = []
+
+    def query(self, query: str, k: int = 10):
+        self.seen_queries.append(query)
+        return super().query(query, k)
+
+
 @pytest.fixture
 def client(monkeypatch):
+    routes._SEARCH_RATE_LIMIT.clear()
     monkeypatch.setattr("backend.app.routes.log_request", lambda **kwargs: "test-request-id")
 
     with TestClient(app) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
+    routes._SEARCH_RATE_LIMIT.clear()
 
 
 def _write_documents_jsonl(index_dir: Path) -> None:
@@ -104,6 +116,58 @@ def test_search_valid_request_returns_200_with_scores(client, tmp_path):
     assert "snippet" in first
 
 
+def test_search_strips_leading_and_trailing_whitespace(client, tmp_path):
+    bm25_dir = tmp_path / "bm25"
+    _write_documents_jsonl(bm25_dir)
+
+    bm25 = RecordingIndex(
+        index_dir=bm25_dir,
+        results=[{"doc_id": "doc-python", "score": 5.0}],
+    )
+    vector = RecordingIndex(
+        index_dir=tmp_path / "vector",
+        results=[{"doc_id": "doc-python", "score": 0.9}],
+    )
+
+    app.dependency_overrides[get_bm25_index] = lambda: bm25
+    app.dependency_overrides[get_vector_index] = lambda: vector
+
+    response = client.post(
+        "/search",
+        json={"query": "   python   ", "top_k": 1, "alpha": 0.5},
+    )
+
+    assert response.status_code == 200
+    assert bm25.seen_queries[-1] == "python"
+    assert vector.seen_queries[-1] == "python"
+
+
+def test_search_collapses_multiple_spaces(client, tmp_path):
+    bm25_dir = tmp_path / "bm25"
+    _write_documents_jsonl(bm25_dir)
+
+    bm25 = RecordingIndex(
+        index_dir=bm25_dir,
+        results=[{"doc_id": "doc-python", "score": 5.0}],
+    )
+    vector = RecordingIndex(
+        index_dir=tmp_path / "vector",
+        results=[{"doc_id": "doc-python", "score": 0.9}],
+    )
+
+    app.dependency_overrides[get_bm25_index] = lambda: bm25
+    app.dependency_overrides[get_vector_index] = lambda: vector
+
+    response = client.post(
+        "/search",
+        json={"query": "python    web   framework", "top_k": 1, "alpha": 0.5},
+    )
+
+    assert response.status_code == 200
+    assert bm25.seen_queries[-1] == "python web framework"
+    assert vector.seen_queries[-1] == "python web framework"
+
+
 def test_search_empty_query_returns_422(client, tmp_path):
     bm25 = MockIndex(index_dir=tmp_path / "bm25", results=[])
     vector = MockIndex(index_dir=tmp_path / "vector", results=[])
@@ -117,6 +181,38 @@ def test_search_empty_query_returns_422(client, tmp_path):
     )
 
     assert response.status_code == 422
+
+
+def test_search_whitespace_only_query_returns_422(client, tmp_path):
+    bm25 = MockIndex(index_dir=tmp_path / "bm25", results=[])
+    vector = MockIndex(index_dir=tmp_path / "vector", results=[])
+
+    app.dependency_overrides[get_bm25_index] = lambda: bm25
+    app.dependency_overrides[get_vector_index] = lambda: vector
+
+    response = client.post(
+        "/search",
+        json={"query": "     ", "top_k": 10, "alpha": 0.5},
+    )
+
+    assert response.status_code == 422
+    assert "whitespace" in response.json()["detail"]
+
+
+def test_search_special_characters_only_query_returns_422(client, tmp_path):
+    bm25 = MockIndex(index_dir=tmp_path / "bm25", results=[])
+    vector = MockIndex(index_dir=tmp_path / "vector", results=[])
+
+    app.dependency_overrides[get_bm25_index] = lambda: bm25
+    app.dependency_overrides[get_vector_index] = lambda: vector
+
+    response = client.post(
+        "/search",
+        json={"query": "!!! ??? ###", "top_k": 10, "alpha": 0.5},
+    )
+
+    assert response.status_code == 422
+    assert "letter or number" in response.json()["detail"]
 
 
 def test_search_alpha_out_of_range_returns_422(client, tmp_path):

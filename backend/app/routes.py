@@ -175,6 +175,21 @@ def _to_utc_day_bounds(
     return start_iso, end_iso
 
 
+def _sanitize_query(query: str) -> str:
+    sanitized = re.sub(r"\s+", " ", query.strip())
+
+    if not sanitized:
+        raise HTTPException(status_code=422, detail="Query must not be empty or whitespace")
+
+    if not any(char.isalnum() for char in sanitized):
+        raise HTTPException(
+            status_code=422,
+            detail="Query must include at least one letter or number",
+        )
+
+    return sanitized
+
+
 def _get_client_ip(request: Request) -> str:
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
@@ -215,8 +230,11 @@ async def search(
     started_at = time.perf_counter()
     result_count = 0
     error_message = None
+    sanitized_query = payload.query
 
     try:
+        sanitized_query = _sanitize_query(payload.query)
+
         client_ip = _get_client_ip(request)
         if _is_rate_limited(client_ip):
             raise HTTPException(
@@ -228,7 +246,7 @@ async def search(
             raise HTTPException(status_code=503, detail="Search indexes are not loaded")
 
         results = hybrid_search(
-            query=payload.query,
+            query=sanitized_query,
             bm25_index=bm25_index,
             vector_index=vector_index,
             top_k=payload.top_k,
@@ -242,7 +260,7 @@ async def search(
         response_results = []
         for item in results:
             doc = documents_by_id.get(item["doc_id"], {})
-            snippet = _build_snippet(doc.get("text", ""), payload.query)
+            snippet = _build_snippet(doc.get("text", ""), sanitized_query)
             response_results.append(
                 {
                     "doc_id": item["doc_id"],
@@ -267,7 +285,7 @@ async def search(
         latency_ms = (time.perf_counter() - started_at) * 1000
         try:
             log_request(
-                query=payload.query,
+                query=sanitized_query,
                 latency_ms=latency_ms,
                 top_k=payload.top_k,
                 alpha=payload.alpha,
