@@ -1,7 +1,9 @@
 # Kearney Assignment
 
 Welcome to My Project Mr. Evaluator !!!
-
+Since I use Github copilot in VS code, and it doesn't have option to download conversation just claude have.
+So I have manually downloaded chat.json file from local storage, converted them into interactive .html file and deployed them so you can read it easily. 
+Kindly access them here: https://endearing-cupcake-4b9e7f.netlify.app/
 
 ## 1) Run the app
 
