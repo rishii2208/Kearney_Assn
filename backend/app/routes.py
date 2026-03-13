@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from app.db import log_request
+from app.db import get_metrics, log_request
 from app.search.hybrid import hybrid_search
 
 
@@ -72,6 +73,27 @@ def _build_snippet(text: str, query: str, snippet_len: int = 200) -> str:
     return cleaned[start:end]
 
 
+def _render_prometheus_metrics(metrics: Dict[str, float]) -> str:
+    lines = [
+        "# HELP search_requests_total Total number of search requests",
+        "# TYPE search_requests_total counter",
+        f"search_requests_total {int(metrics['total_requests'])}",
+        "# HELP search_errors_total Total number of search requests with an error",
+        "# TYPE search_errors_total counter",
+        f"search_errors_total {int(metrics['total_errors'])}",
+        "# HELP search_latency_p50_ms 50th percentile search latency in milliseconds",
+        "# TYPE search_latency_p50_ms gauge",
+        f"search_latency_p50_ms {float(metrics['latency_p50_ms']):.6f}",
+        "# HELP search_latency_p95_ms 95th percentile search latency in milliseconds",
+        "# TYPE search_latency_p95_ms gauge",
+        f"search_latency_p95_ms {float(metrics['latency_p95_ms']):.6f}",
+        "# HELP search_zero_result_queries_total Number of zero-result search queries",
+        "# TYPE search_zero_result_queries_total counter",
+        f"search_zero_result_queries_total {int(metrics['zero_result_query_count'])}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 @router.post("/search")
 async def search(payload: SearchRequest, request: Request) -> Dict[str, List[dict]]:
     started_at = time.perf_counter()
@@ -133,3 +155,17 @@ async def search(payload: SearchRequest, request: Request) -> Dict[str, List[dic
             )
         except Exception as exc:
             logger.warning("Failed to log search request to sqlite: %s", exc)
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+async def metrics() -> PlainTextResponse:
+    try:
+        metrics_payload = get_metrics()
+    except Exception:
+        logger.exception("Failed to read metrics from sqlite")
+        raise HTTPException(status_code=500, detail="Failed to read metrics")
+
+    return PlainTextResponse(
+        content=_render_prometheus_metrics(metrics_payload),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
