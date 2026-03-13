@@ -1,0 +1,93 @@
+.form {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.95rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.slider {
+  width: 100%;
+}
+
+.button {
+  width: fit-content;
+  background: #2563eb;
+  color: #ffffff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.meta {
+  margin: 14px 0 0;
+  color: #4b5563;
+}
+
+.error {
+  margin: 12px 0 0;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.empty {
+  margin: 12px 0 0;
+  color: #4b5563;
+}
+
+.results {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fcfdff;
+}
+
+.resultTitle {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.snippet {
+  margin: 0 0 8px;
+  color: #374151;
+  line-height: 1.45;
+}
+
+.scores {
+  margin: 0;
+  color: #111827;
+  font-size: 0.92rem;
+}

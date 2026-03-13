@@ -136,6 +136,7 @@ async def search(
             response_results.append(
                 {
                     "doc_id": item["doc_id"],
+                    "title": doc.get("title") or item["doc_id"],
                     "bm25_score": item["bm25_score"],
                     "vector_score": item["vector_score"],
                     "hybrid_score": item["hybrid_score"],

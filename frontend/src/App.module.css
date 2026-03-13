@@ -1,0 +1,49 @@
+.app {
+  min-height: 100vh;
+  background: #f7f7fb;
+  color: #1f2937;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.navLink {
+  text-decoration: none;
+  color: #374151;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  font-size: 0.95rem;
+}
+
+.active {
+  color: #111827;
+  background: #e5edff;
+  border-color: #9db4ff;
+}
+
+.main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}

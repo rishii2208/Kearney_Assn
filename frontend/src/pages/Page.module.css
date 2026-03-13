@@ -1,0 +1,17 @@
+.page {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+.text {
+  margin: 0;
+  line-height: 1.5;
+  color: #4b5563;
+}
