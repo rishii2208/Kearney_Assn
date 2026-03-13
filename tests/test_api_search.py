@@ -21,6 +21,7 @@ if "sentence_transformers" not in sys.modules:
     sys.modules["sentence_transformers"] = sentence_transformers_stub
 
 from backend.app.main import app
+import backend.app.routes as routes
 from backend.app.routes import get_bm25_index, get_vector_index
 
 
@@ -144,6 +145,42 @@ def test_search_missing_indexes_returns_503(client):
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Search indexes are not loaded"
+
+
+def test_search_rate_limit_returns_429(client, tmp_path, monkeypatch):
+    bm25_dir = tmp_path / "bm25"
+    _write_documents_jsonl(bm25_dir)
+
+    bm25 = MockIndex(
+        index_dir=bm25_dir,
+        results=[
+            {"doc_id": "doc-python", "score": 5.0},
+            {"doc_id": "doc-ml", "score": 1.0},
+        ],
+    )
+    vector = MockIndex(
+        index_dir=tmp_path / "vector",
+        results=[
+            {"doc_id": "doc-python", "score": 0.9},
+            {"doc_id": "doc-ml", "score": 0.2},
+        ],
+    )
+
+    app.dependency_overrides[get_bm25_index] = lambda: bm25
+    app.dependency_overrides[get_vector_index] = lambda: vector
+
+    routes._SEARCH_RATE_LIMIT.clear()
+    monkeypatch.setattr("backend.app.routes.RATE_LIMIT_MAX_REQUESTS", 2)
+
+    body = {"query": "python", "top_k": 2, "alpha": 0.5}
+    response_1 = client.post("/search", json=body)
+    response_2 = client.post("/search", json=body)
+    response_3 = client.post("/search", json=body)
+
+    assert response_1.status_code == 200
+    assert response_2.status_code == 200
+    assert response_3.status_code == 429
+    assert "Rate limit exceeded" in response_3.json()["detail"]
 
 
 def test_health_returns_ok(client):

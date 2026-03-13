@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import re
+import threading
 import time
 from datetime import date, datetime, time as dt_time, timezone
 from pathlib import Path
@@ -25,6 +26,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENTS_CSV_PATH = PROJECT_ROOT / "data" / "metrics" / "experiments.csv"
+RATE_LIMIT_MAX_REQUESTS = 30
+RATE_LIMIT_WINDOW_SECONDS = 60
+_SEARCH_RATE_LIMIT: Dict[str, Dict[str, float]] = {}
+_SEARCH_RATE_LIMIT_LOCK = threading.Lock()
 
 
 class SearchRequest(BaseModel):
@@ -170,6 +175,36 @@ def _to_utc_day_bounds(
     return start_iso, end_iso
 
 
+def _get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        first = forwarded_for.split(",")[0].strip()
+        if first:
+            return first
+
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
+
+
+def _is_rate_limited(client_ip: str) -> bool:
+    now = time.time()
+
+    with _SEARCH_RATE_LIMIT_LOCK:
+        bucket = _SEARCH_RATE_LIMIT.get(client_ip)
+
+        if bucket is None or now - bucket["window_start"] >= RATE_LIMIT_WINDOW_SECONDS:
+            _SEARCH_RATE_LIMIT[client_ip] = {"window_start": now, "count": 1.0}
+            return False
+
+        if bucket["count"] >= RATE_LIMIT_MAX_REQUESTS:
+            return True
+
+        bucket["count"] += 1.0
+        return False
+
+
 @router.post("/search")
 async def search(
     payload: SearchRequest,
@@ -182,6 +217,13 @@ async def search(
     error_message = None
 
     try:
+        client_ip = _get_client_ip(request)
+        if _is_rate_limited(client_ip):
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded: max 30 requests per minute per IP",
+            )
+
         if bm25_index is None or vector_index is None:
             raise HTTPException(status_code=503, detail="Search indexes are not loaded")
 
